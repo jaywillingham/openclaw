@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -716,6 +717,33 @@ function applySkillsPromptLimits(params: {
   return { skillsForPrompt, truncated, compact };
 }
 
+// =============================================================================
+// PROMPT INTERNMENT — Krang Health fix 2026-05-02
+// =============================================================================
+// buildWorkspaceSkillSnapshot is called once per new session (cron, subagent,
+// auto-reply, active-memory). Each call returns a new SkillSnapshot whose
+// `prompt` field is a freshly-allocated ~6.8 MiB string. Heap snapshots taken
+// 2026-05-02 showed 257 copies of identical prompt content holding ~1.7 GiB
+// total — the dominant contributor to OOM crashes.
+//
+// Fix: intern the prompt string by content hash. Identical prompt content
+// shares one string reference across all snapshots. Cache is bounded to 16
+// entries (one per distinct skill-set/filter combination).
+const promptInternCache = new Map<string, string>();
+const PROMPT_INTERN_CACHE_MAX = 16;
+
+function internPrompt(prompt: string): string {
+  const key = crypto.createHash("sha1").update(prompt).digest("hex");
+  const existing = promptInternCache.get(key);
+  if (existing) return existing;
+  promptInternCache.set(key, prompt);
+  if (promptInternCache.size > PROMPT_INTERN_CACHE_MAX) {
+    const firstKey = promptInternCache.keys().next().value;
+    if (firstKey !== undefined) promptInternCache.delete(firstKey);
+  }
+  return prompt;
+}
+
 export function buildWorkspaceSkillSnapshot(
   workspaceDir: string,
   opts?: WorkspaceSkillBuildOptions & { snapshotVersion?: number },
@@ -723,7 +751,7 @@ export function buildWorkspaceSkillSnapshot(
   const { eligible, prompt, resolvedSkills } = resolveWorkspaceSkillPromptState(workspaceDir, opts);
   const skillFilter = resolveEffectiveWorkspaceSkillFilter(opts);
   return {
-    prompt,
+    prompt: internPrompt(prompt),
     skills: eligible.map((entry) => ({
       name: entry.skill.name,
       primaryEnv: entry.metadata?.primaryEnv,
