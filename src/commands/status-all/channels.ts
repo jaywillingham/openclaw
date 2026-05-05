@@ -128,8 +128,16 @@ const buildAccountNotes = (params: {
     notes.push(`db:${snapshot.dbPath}`);
   }
 
-  const allowFrom =
-    plugin.config.resolveAllowFrom?.({ cfg, accountId: snapshot.accountId }) ?? snapshot.allowFrom;
+  let allowFrom = snapshot.allowFrom;
+  if (plugin.config.resolveAllowFrom) {
+    try {
+      allowFrom =
+        plugin.config.resolveAllowFrom({ cfg, accountId: snapshot.accountId }) ??
+        snapshot.allowFrom;
+    } catch {
+      notes.push("allowlist unavailable in this command path");
+    }
+  }
   if (allowFrom?.length) {
     const formatted = formatChannelAllowFrom({
       plugin,
