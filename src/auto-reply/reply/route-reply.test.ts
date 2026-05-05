@@ -177,7 +177,9 @@ describe("routeReply", () => {
       ]),
     );
     mocks.deliverOutboundPayloads.mockReset();
-    mocks.deliverOutboundPayloads.mockResolvedValue([]);
+    mocks.deliverOutboundPayloads.mockResolvedValue([
+      { channel: "slack", messageId: "m-delivered" },
+    ]);
   });
 
   afterEach(() => {
@@ -317,6 +319,34 @@ describe("routeReply", () => {
     expectLastDelivery({
       payloads: [expect.objectContaining({ text: "[openclaw] hi" })],
     });
+  });
+
+  it("fails loudly when routed outbound delivery returns no confirmed message id", async () => {
+    mocks.deliverOutboundPayloads.mockResolvedValueOnce([]);
+
+    const res = await routeReply({
+      payload: { text: "hi" },
+      channel: "slack",
+      to: "channel:C123",
+      cfg: {} as never,
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/no confirmed message id/i);
+  });
+
+  it("fails loudly when routed outbound delivery returns a blank message id", async () => {
+    mocks.deliverOutboundPayloads.mockResolvedValueOnce([{ channel: "slack", messageId: " " }]);
+
+    const res = await routeReply({
+      payload: { text: "hi" },
+      channel: "slack",
+      to: "channel:C123",
+      cfg: {} as never,
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/no confirmed message id/i);
   });
 
   it("routes directive-only Slack replies when interactive replies are enabled", async () => {

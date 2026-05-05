@@ -144,6 +144,16 @@ async function postSlackMessageBestEffort(params: {
   }
 }
 
+function requireSlackPostMessageDelivery(response: unknown): { ts: string } {
+  const maybe = response as { ok?: unknown; ts?: unknown; error?: unknown } | null;
+  const ts = normalizeOptionalString(maybe?.ts);
+  if (ts) {
+    return { ts };
+  }
+  const error = normalizeOptionalString(maybe?.error) ?? "missing ts";
+  throw new Error(`Slack chat.postMessage did not confirm delivery: ${error}`);
+}
+
 export type SlackSendResult = {
   messageId: string;
   channelId: string;
@@ -420,8 +430,9 @@ async function sendMessageSlackQueued(params: {
       identity: opts.identity,
       blocks,
     });
+    const delivered = requireSlackPostMessageDelivery(response);
     return {
-      messageId: response.ts ?? "unknown",
+      messageId: delivered.ts,
       channelId,
     };
   }
@@ -472,7 +483,7 @@ async function sendMessageSlackQueued(params: {
         threadTs: opts.threadTs,
         identity: opts.identity,
       });
-      lastMessageId = response.ts ?? lastMessageId;
+      lastMessageId = requireSlackPostMessageDelivery(response).ts;
     }
   } else {
     for (const chunk of resolvedChunks.length ? resolvedChunks : [""]) {
@@ -483,12 +494,12 @@ async function sendMessageSlackQueued(params: {
         threadTs: opts.threadTs,
         identity: opts.identity,
       });
-      lastMessageId = response.ts ?? lastMessageId;
+      lastMessageId = requireSlackPostMessageDelivery(response).ts;
     }
   }
 
   return {
-    messageId: lastMessageId || "unknown",
+    messageId: lastMessageId,
     channelId,
   };
 }

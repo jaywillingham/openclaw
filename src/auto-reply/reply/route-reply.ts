@@ -248,8 +248,14 @@ export async function routeReply(params: RouteReplyParams): Promise<RouteReplyRe
           : undefined,
     });
 
-    const last = results.at(-1);
-    return { ok: true, messageId: last?.messageId };
+    const messageId = results.at(-1)?.messageId?.trim();
+    if (!messageId) {
+      return {
+        ok: false,
+        error: `Failed to route reply to ${channel}: outbound delivery returned no confirmed message id`,
+      };
+    }
+    return { ok: true, messageId };
   } catch (err) {
     const message = formatErrorMessage(err);
     return {

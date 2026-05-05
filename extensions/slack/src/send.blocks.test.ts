@@ -41,6 +41,19 @@ describe("sendMessageSlack NO_REPLY guard", () => {
     expect(client.chat.postMessage).toHaveBeenCalled();
   });
 
+  it("rejects Slack API responses that do not confirm a delivered timestamp", async () => {
+    const client = createSlackSendTestClient();
+    client.chat.postMessage.mockResolvedValueOnce({ ok: true });
+
+    await expect(
+      sendMessageSlack("channel:C123", "hello", {
+        token: "xoxb-test",
+        cfg: SLACK_TEST_CFG,
+        client,
+      }),
+    ).rejects.toThrow(/did not confirm delivery/i);
+  });
+
   it("does not suppress NO_REPLY when blocks are attached", async () => {
     const client = createSlackSendTestClient();
     const result = await sendMessageSlack("channel:C123", "NO_REPLY", {
